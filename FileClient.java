@@ -58,6 +58,10 @@ public class FileClient {
         String response = dis.readUTF();
         if (response.equals("OK")) {
             long fileSize = dis.readLong();
+            File dir = new File("client_files");
+            if (!dir.exists()) {
+                dir.mkdir();
+            }
             try (FileOutputStream fos = new FileOutputStream("client_files/" + fileName)) {
                 byte[] buffer = new byte[4096];
                 int read;

@@ -10,7 +10,6 @@ public class MulticastHandler {
     private int multicastPort;
     private JTextArea logTextArea;
     private JComboBox<String> clientList;
-    private MulticastSocket socket;
     private Set<String> clients;
 
     public MulticastHandler(String multicastAddress, int multicastPort, JTextArea logTextArea, JComboBox<String> clientList) {
@@ -22,50 +21,56 @@ public class MulticastHandler {
     }
 
     public void startMulticastListener() {
-        Thread listenerThread = new Thread(() -> {
-            try {
-                socket = new MulticastSocket(multicastPort);
-                InetAddress group = InetAddress.getByName(multicastAddress);
-                socket.joinGroup(group);
+        Thread listenerThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try (MulticastSocket socket = new MulticastSocket(multicastPort)) {
+                    InetAddress group = InetAddress.getByName(multicastAddress);
+                    socket.joinGroup(group);
 
-                byte[] buffer = new byte[256];
-                while (true) {
-                    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                    socket.receive(packet);
+                    logTextArea.append("Listening for multicast messages on " + multicastAddress + ":" + multicastPort + "\n");
 
-                    String message = new String(packet.getData(), 0, packet.getLength());
-                    if (message.startsWith("PRESENT:")) {
-                        String clientAddress = message.substring(8);
-                        if (clients.add(clientAddress)) {
-                            SwingUtilities.invokeLater(() -> clientList.addItem(clientAddress));
-                            logTextArea.append("New client discovered: " + clientAddress + "\n");
+                    while (true) {
+                        byte[] buffer = new byte[256];
+                        DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                        socket.receive(packet);
+
+                        String message = new String(packet.getData(), 0, packet.getLength());
+                        if (message.startsWith("PRESENT:")) {
+                            String clientAddress = message.substring(8);
+                            if (!clients.contains(clientAddress)) {
+                                clients.add(clientAddress);
+                                clientList.addItem(clientAddress);
+                                logTextArea.append("Client discovered: " + clientAddress + "\n");
+                            }
                         }
                     }
+                } catch (IOException ex) {
+                    ex.printStackTrace();
                 }
-            } catch (IOException ex) {
-                logTextArea.append("Multicast Listener Error: " + ex.getMessage() + "\n");
-                ex.printStackTrace();
             }
         });
         listenerThread.start();
     }
 
     public void announcePresence() {
-        Thread announceThread = new Thread(() -> {
-            try {
-                DatagramSocket socket = new DatagramSocket();
-                InetAddress group = InetAddress.getByName(multicastAddress);
-                String message = "PRESENT:" + InetAddress.getLocalHost().getHostAddress();
-                DatagramPacket packet = new DatagramPacket(message.getBytes(), message.length(), group, multicastPort);
-                while (true) {
+        Thread announcerThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try (DatagramSocket socket = new DatagramSocket()) {
+                    InetAddress group = InetAddress.getByName(multicastAddress);
+                    String message = "PRESENT:" + InetAddress.getLocalHost().getHostAddress();
+                    byte[] buffer = message.getBytes();
+
+                    DatagramPacket packet = new DatagramPacket(buffer, buffer.length, group, multicastPort);
                     socket.send(packet);
-                    Thread.sleep(5000);
+
+                    logTextArea.append("Announced presence: " + message + "\n");
+                } catch (IOException ex) {
+                    ex.printStackTrace();
                 }
-            } catch (IOException | InterruptedException ex) {
-                logTextArea.append("Multicast Announce Error: " + ex.getMessage() + "\n");
-                ex.printStackTrace();
             }
         });
-        announceThread.start();
+        announcerThread.start();
     }
 }

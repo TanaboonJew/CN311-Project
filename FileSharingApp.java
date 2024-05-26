@@ -2,13 +2,12 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.io.File;
+import java.io.*;
+import java.net.InetAddress;
+import java.net.Socket;
+import java.util.ArrayList;
 
 public class FileSharingApp extends JFrame {
-
-    private static final int SERVER_PORT = 12345;
-    private static final String MULTICAST_ADDRESS = "230.0.0.0";
-    private static final int MULTICAST_PORT = 12346;
 
     private JTextArea logTextArea;
     private JTextField fileNameField;
@@ -16,14 +15,13 @@ public class FileSharingApp extends JFrame {
     private JButton downloadButton;
     private JButton browseButton;
     private JComboBox<String> clientList;
-
-    private MulticastHandler multicastHandler;
-    private FileTransferHandler fileTransferHandler;
     private JFileChooser fileChooser;
+    private FileTransferHandler fileTransferHandler;
+    private MulticastHandler multicastHandler;
 
     public FileSharingApp() {
         setTitle("P2P File Sharing App");
-        setSize(500, 400);
+        setSize(600, 400);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
@@ -38,7 +36,6 @@ public class FileSharingApp extends JFrame {
         downloadButton = new JButton("Download");
         browseButton = new JButton("Browse");
         clientList = new JComboBox<>();
-
         inputPanel.add(fileNameField);
         inputPanel.add(browseButton);
         inputPanel.add(uploadButton);
@@ -51,10 +48,10 @@ public class FileSharingApp extends JFrame {
         browseButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                int returnVal = fileChooser.showOpenDialog(FileSharingApp.this);
-                if (returnVal == JFileChooser.APPROVE_OPTION) {
-                    File file = fileChooser.getSelectedFile();
-                    fileNameField.setText(file.getAbsolutePath());
+                int returnValue = fileChooser.showOpenDialog(null);
+                if (returnValue == JFileChooser.APPROVE_OPTION) {
+                    File selectedFile = fileChooser.getSelectedFile();
+                    fileNameField.setText(selectedFile.getAbsolutePath());
                 }
             }
         });
@@ -63,11 +60,11 @@ public class FileSharingApp extends JFrame {
             @Override
             public void actionPerformed(ActionEvent e) {
                 String filePath = fileNameField.getText();
-                String selectedClient = (String) clientList.getSelectedItem();
-                if (!filePath.isEmpty() && selectedClient != null) {
-                    uploadFile(filePath, selectedClient);
+                String targetClient = (String) clientList.getSelectedItem();
+                if (filePath.isEmpty() || targetClient == null) {
+                    logTextArea.append("Please select a file and target client.\n");
                 } else {
-                    logTextArea.append("Please select a file and a client.\n");
+                    uploadFile(filePath, targetClient);
                 }
             }
         });
@@ -76,17 +73,17 @@ public class FileSharingApp extends JFrame {
             @Override
             public void actionPerformed(ActionEvent e) {
                 String fileName = fileNameField.getText();
-                String selectedClient = (String) clientList.getSelectedItem();
-                if (!fileName.isEmpty() && selectedClient != null) {
-                    downloadFile(fileName, selectedClient);
+                String targetClient = (String) clientList.getSelectedItem();
+                if (fileName.isEmpty() || targetClient == null) {
+                    logTextArea.append("Please enter a file name and target client.\n");
                 } else {
-                    logTextArea.append("Please enter a file name and select a client.\n");
+                    downloadFile(fileName, targetClient);
                 }
             }
         });
 
-        fileTransferHandler = new FileTransferHandler(SERVER_PORT, logTextArea);
-        multicastHandler = new MulticastHandler(MULTICAST_ADDRESS, MULTICAST_PORT, logTextArea, clientList);
+        fileTransferHandler = new FileTransferHandler(12345, logTextArea);
+        multicastHandler = new MulticastHandler("230.0.0.0", 4446, logTextArea, clientList);
 
         fileTransferHandler.startServer();
         multicastHandler.startMulticastListener();
@@ -94,19 +91,19 @@ public class FileSharingApp extends JFrame {
     }
 
     private void uploadFile(String filePath, String targetClient) {
-        File file = new File(filePath);
-        if (!file.exists()) {
-            logTextArea.append("Error: File not found: " + filePath + "\n");
-            return;
-        }
-        fileTransferHandler.uploadFile(filePath, targetClient, SERVER_PORT);
+        fileTransferHandler.uploadFile(filePath, targetClient, 12345);
     }
 
     private void downloadFile(String fileName, String targetClient) {
-        fileTransferHandler.downloadFile(fileName, targetClient, SERVER_PORT);
+        fileTransferHandler.downloadFile(fileName, targetClient, 12345);
     }
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> new FileSharingApp().setVisible(true));
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                new FileSharingApp().setVisible(true);
+            }
+        });
     }
 }
